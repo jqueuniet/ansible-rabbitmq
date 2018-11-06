@@ -11,11 +11,19 @@
     mode: 0755
   when: not rabbitmqadmin_check['stat']['exists']
 
+- name: rabbitmq_ha_config | check queues
+  command: rabbitmqadmin list queues -f raw_json
+  changed_when: False
+  register: rabbitmq_current_queues
+
 - name: rabbitmq_ha_config | creating queue(s)
   command: rabbitmqadmin declare queue name={{ item['queue_name'] }} durable={{ item['durable']|lower }}
   run_once: true
   become: true
   with_items: "{{ rabbitmq_config }}"
+  when: "{{ rabbitmq_current_queues|json_query(query)|count }} == 0"
+  vars:
+    query: "[?name == `{{ item['queue_name'] }}` ]"
 
 - name: rabbitmq_ha_config | setting up ha on queue(s)
   rabbitmq_policy:
@@ -27,16 +35,33 @@
   become: true
   with_items: "{{ rabbitmq_config }}"
 
+- name: rabbitmq_ha_config | check exchanges
+  command: rabbitmqadmin list exchanges -f raw_json
+  changed_when: False
+  register: rabbitmq_current_exchanges
+
 - name: rabbitmq_ha_config | creating exchange(s)
   command: rabbitmqadmin declare exchange name={{ item['exchange_name'] }} type={{ item['type'] }}
   run_once: true
   become: true
   with_items: "{{ rabbitmq_config }}"
-  when: item['exchange_name'] is defined
+  when:
+    - item['exchange_name'] is defined
+    - "{{ rabbitmq_current_exchanges | json_query(query) | count }} == 0"
+  vars:
+    query: "[?name == `{{ item['exchange_name'] }}` ]"
+- name: rabbitmq_ha_config | check bindings
+  command: rabbitmqadmin list bindings -f raw_json
+  changed_when: False
+  register: rabbitmq_current_bindings
 
 - name: rabbitmq_ha_config | creating binding(s)
   command: rabbitmqadmin declare binding source={{ item['exchange_name'] }} destination_type="queue" destination={{ item['queue_name'] }} routing_key={{ item['routing_key'] }}
   run_once: true
   become: true
   with_items: "{{ rabbitmq_config }}"
-  when: item['exchange_name'] is defined
+  when:
+    - item['exchange_name'] is defined
+    - "{{ rabbitmq_current_bindings | json_query(query) | count }} == 0"
+  vars:
+    query: "[?destination == `{{ item['queue_name'] }}` && routing_key == `{{ item['routing_key'] }}` && source == `{{ item['exchange_name'] }}` ]"
