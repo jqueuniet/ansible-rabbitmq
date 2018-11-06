@@ -47,9 +47,9 @@
 
 - name: rabbitmq_clustering | starting rabbitmq app on master
   command: rabbitmqctl start_app
-  register: cluster_master
   become: true
   when: inventory_hostname == rabbitmq_master
+  notify: mark clustering
 
 - name: rabbitmq_clustering | sending sigterm to any running rabbitmq processes
   shell: pkill -u rabbitmq || true
@@ -75,20 +75,11 @@
 
 - name: rabbitmq_clustering | joining rabbitmq cluster
   command: rabbitmqctl join_cluster "rabbit@{{ hostvars[rabbitmq_master]['ansible_hostname'] }}"
-  register: cluster_joined
   become: true
   when: inventory_hostname != rabbitmq_master
+  notify: mark clustering
 
 - name: rabbitmq_clustering | starting rabbitmq app
   command: rabbitmqctl start_app
   become: true
   when: inventory_hostname != rabbitmq_master
-
-- name: rabbitmq_clustering | marking as clustered
-  file:
-    path: /etc/rabbitmq/clustered
-    state: touch
-  become: true
-  when: >
-        cluster_master['changed'] or
-        cluster_joined['changed']

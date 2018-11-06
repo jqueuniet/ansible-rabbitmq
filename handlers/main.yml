@@ -5,3 +5,9 @@
     name: "rabbitmq-server"
     state: restarted
   become: true
+
+- name: mark clustering
+  file:
+    path: /etc/rabbitmq/clustered
+    state: touch
+  become: true
